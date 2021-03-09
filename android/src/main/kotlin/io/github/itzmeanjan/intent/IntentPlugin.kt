@@ -48,7 +48,8 @@ class IntentPlugin(private val registrar: Registrar, private val activity: Activ
                                 if (intent.type == ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE)
                                     filePaths.add(resolveContacts(intent.clipData?.getItemAt(i)?.uri!!))
                                 else
-                                    filePaths.add(uriToFilePath(intent.clipData?.getItemAt(i)?.uri!!))
+                                    //filePaths.add(uriToFilePath(intent.clipData?.getItemAt(i)?.uri!!))
+                                    filePaths.add(intent.clipData?.getItemAt(i)?.uri!!.toString())
                                 i++
                             }
                             activityCompletedCallBack?.sendDocument(filePaths)
@@ -56,7 +57,8 @@ class IntentPlugin(private val registrar: Registrar, private val activity: Activ
                             if (intent.type == ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE)
                                 filePaths.add(resolveContacts(intent.data!!))
                             else
-                                filePaths.add(uriToFilePath(intent.data!!))
+                                //filePaths.add(uriToFilePath(intent.data!!))
+                                filePaths.add(intent.data!!.toString())
                             activityCompletedCallBack?.sendDocument(filePaths)
                         }
                         true
