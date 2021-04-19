@@ -1,8 +1,11 @@
 import 'package:flutter/services.dart';
 
 class Intent {
-  Intent() :
-        _category = [], _flag = [], _extra = {}, _typeInfo = {};
+  Intent()
+      : _category = [],
+        _flag = [],
+        _extra = {},
+        _typeInfo = {};
 
   static const MethodChannel _channel = const MethodChannel('intent');
 
@@ -14,7 +17,7 @@ class Intent {
   List<int> _flag;
   Map<String, dynamic> _extra;
   Map<String, String> _typeInfo;
-  String _component;
+  String? _component;
 
   /// Adds category for this intent
   ///
@@ -53,8 +56,7 @@ class Intent {
   setData(Uri data) => this._data = data;
 
   /// Sets component with packageName and className
-  setComponent(String component) =>
-      this._component = component;
+  setComponent(String component) => this._component = component;
 
   /// You'll most likely use this method.
   ///
@@ -62,7 +64,10 @@ class Intent {
   ///
   /// *Now supports setting specific package name, which asks Android to
   /// resolve this Intent using that package, provided it's available*
-  Future<void> startActivity({bool createChooser: false, String chooserTitle}) {
+  Future<void> startActivity({
+    bool createChooser: false,
+    String? chooserTitle,
+  }) {
     Map<String, dynamic> parameters = {};
 
     if (_action != null) parameters['action'] = _action;
@@ -73,10 +78,11 @@ class Intent {
     if (_flag.isNotEmpty) parameters['flag'] = _flag;
     if (_extra.isNotEmpty) parameters['extra'] = _extra;
     if (_typeInfo.isNotEmpty) parameters['typeInfo'] = _typeInfo;
-    if (_component.isNotEmpty) parameters['component'] = _component;
+    if (_component?.isNotEmpty == true) parameters['component'] = _component;
 
     parameters['chooser'] = createChooser;
-    parameters['chooserTitle'] = chooserTitle;
+    if (chooserTitle?.isNotEmpty == true)
+      parameters['chooserTitle'] = chooserTitle;
 
     return _channel.invokeMethod('startActivity', parameters);
   }
@@ -85,8 +91,10 @@ class Intent {
   /// from intent, then this method needs to be called. Returns
   /// a future, which will be resolved if platform call gets
   /// successful, otherwise results into error.
-  Future<List<String>> startActivityForResult(
-      {bool createChooser: false, String chooserTitle}) {
+  Future<List<String>> startActivityForResult({
+    bool createChooser: false,
+    String? chooserTitle,
+  }) {
     Map<String, dynamic> parameters = {};
 
     if (_action != null) parameters['action'] = _action;
@@ -97,10 +105,11 @@ class Intent {
     if (_flag.isNotEmpty) parameters['flag'] = _flag;
     if (_extra.isNotEmpty) parameters['extra'] = _extra;
     if (_typeInfo.isNotEmpty) parameters['typeInfo'] = _typeInfo;
-    if (_component.isNotEmpty) parameters['component'] = _component;
+    if (_component?.isNotEmpty == true) parameters['component'] = _component;
 
     parameters['chooser'] = createChooser;
-    parameters['chooserTitle'] = chooserTitle;
+    if (chooserTitle?.isNotEmpty == true)
+      parameters['chooserTitle'] = chooserTitle;
 
     return _channel
         .invokeMethod('startActivityForResult', parameters)
