@@ -1,13 +1,15 @@
 package io.github.itzmeanjan.intent
 
 import android.app.Activity
-import android.content.ComponentName
-import android.content.Intent
+import android.content.*
 import android.net.Uri
 import android.os.Environment
 import android.provider.ContactsContract
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
@@ -17,10 +19,38 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.collections.ArrayList
 
-class IntentPlugin(private val activity: Activity) : MethodCallHandler, PluginRegistry.ActivityResultListener {
+class IntentPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginRegistry.ActivityResultListener {
+    private var applicationContext: Context? = null
+    private var activity: Activity? = null
+    private val validActivity: Activity
+        get() = activity!!
     private var activityCompletedCallBack: ActivityCompletedCallBack? = null
     private lateinit var toBeCapturedImageLocationURI: Uri
     private lateinit var tobeCapturedImageLocationFilePath: File
+
+    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        applicationContext = binding.applicationContext
+    }
+
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        applicationContext = null
+    }
+
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activity = binding.activity
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activity = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        activity = binding.activity
+    }
+
+    override fun onDetachedFromActivity() {
+        activity = null
+    }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
@@ -29,9 +59,9 @@ class IntentPlugin(private val activity: Activity) : MethodCallHandler, PluginRe
                 val intent = createIntentWithMethodCall(call)
 
                 try {
-                    if (call.argument<Boolean>("chooser")!!) activity.startActivity(Intent.createChooser(intent, call.argument<String>("chooserTitle")
+                    if (call.argument<Boolean>("chooser")!!) validActivity.startActivity(Intent.createChooser(intent, call.argument<String>("chooserTitle")
                             ?: "Sharing"))
-                    else activity.startActivity(intent)
+                    else validActivity.startActivity(intent)
                 } catch (e: Exception) {
                     result.error("Error", e.toString(), null)
                 }
@@ -52,27 +82,27 @@ class IntentPlugin(private val activity: Activity) : MethodCallHandler, PluginRe
 
                 try {
                     if (intent.action == MediaStore.ACTION_IMAGE_CAPTURE) {
-                        intent.resolveActivity(activity.packageManager).also {
+                        intent.resolveActivity(validActivity.packageManager).also {
                             getImageTempFile()?.also {
                                 tobeCapturedImageLocationFilePath = it
-                                activity.packageName
-                                toBeCapturedImageLocationURI = FileProvider.getUriForFile(activity.applicationContext, "${activity.packageName}.io.github.itzmeanjan.intent.fileProvider", it)
+                                validActivity.packageName
+                                toBeCapturedImageLocationURI = FileProvider.getUriForFile(validActivity.applicationContext, "${validActivity.packageName}.io.github.itzmeanjan.intent.fileProvider", it)
                                 intent.putExtra(MediaStore.EXTRA_OUTPUT, toBeCapturedImageLocationURI)
-                                activity.startActivityForResult(intent, activityImageVideoCaptureCode)
+                                validActivity.startActivityForResult(intent, activityImageVideoCaptureCode)
                             }
                         }
                     } else if (intent.action == MediaStore.ACTION_VIDEO_CAPTURE) {
-                        intent.resolveActivity(activity.packageManager).also {
+                        intent.resolveActivity(validActivity.packageManager).also {
                             getVideoTempFile()?.also {
                                 tobeCapturedImageLocationFilePath = it
-                                toBeCapturedImageLocationURI = FileProvider.getUriForFile(activity.applicationContext, "${activity.packageName}.io.github.itzmeanjan.intent.fileProvider", it)
+                                toBeCapturedImageLocationURI = FileProvider.getUriForFile(validActivity.applicationContext, "${validActivity.packageName}.io.github.itzmeanjan.intent.fileProvider", it)
                                 intent.putExtra(MediaStore.EXTRA_OUTPUT, toBeCapturedImageLocationURI)
-                                activity.startActivityForResult(intent, activityImageVideoCaptureCode)
+                                validActivity.startActivityForResult(intent, activityImageVideoCaptureCode)
                             }
                         }
                     } else {
-                        if (call.argument<Boolean>("chooser")!!) activity.startActivityForResult(Intent.createChooser(intent, "Sharing"), activityIdentifierCode)
-                        else activity.startActivityForResult(intent, activityIdentifierCode)
+                        if (call.argument<Boolean>("chooser")!!) validActivity.startActivityForResult(Intent.createChooser(intent, "Sharing"), activityIdentifierCode)
+                        else validActivity.startActivityForResult(intent, activityIdentifierCode)
                     }
                 } catch (e: Exception) {
                     result.error("Error", e.toString(), null)
@@ -187,7 +217,7 @@ class IntentPlugin(private val activity: Activity) : MethodCallHandler, PluginRe
     private fun getImageTempFile(): File? {
         return try {
             val timeStamp = SimpleDateFormat("ddMMyyyy_HHmmss", Locale.getDefault()).format(Date())
-            val storageDir = activity.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+            val storageDir = validActivity.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
             File.createTempFile("IMG_${timeStamp}", ".jpg", storageDir)
         } catch (e: java.lang.Exception) {
             null
@@ -197,7 +227,7 @@ class IntentPlugin(private val activity: Activity) : MethodCallHandler, PluginRe
     private fun getVideoTempFile(): File? {
         return try {
             val timeStamp = SimpleDateFormat("ddMMyyyy_HHmmss", Locale.getDefault()).format(Date())
-            val storageDir = activity.getExternalFilesDir(Environment.DIRECTORY_DCIM)
+            val storageDir = validActivity.getExternalFilesDir(Environment.DIRECTORY_DCIM)
             File.createTempFile("VIDEO_${timeStamp}", ".mp4", storageDir)
         } catch (e: java.lang.Exception) {
             null
@@ -206,22 +236,12 @@ class IntentPlugin(private val activity: Activity) : MethodCallHandler, PluginRe
 
     private fun resolveContacts(uri: Uri): String {
         lateinit var contact: String
-        activity.applicationContext.contentResolver.query(uri, arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null).apply {
+        validActivity.applicationContext.contentResolver.query(uri, arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null).apply {
             this?.moveToFirst()
             contact = this?.getString(getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER))!!
             close()
         }
         return contact
-    }
-
-    private fun uriToFilePath(uri: Uri): String {
-        val cursor = activity.applicationContext.contentResolver.query(uri,
-                arrayOf(MediaStore.MediaColumns.DATA),
-                null, null, null)
-        cursor?.moveToFirst()
-        val tmp = cursor?.getString(cursor.getColumnIndex(MediaStore.MediaColumns.DATA))
-        cursor?.close()
-        return tmp!!
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, intent: Intent?): Boolean {
