@@ -9,76 +9,18 @@ import android.provider.ContactsContract
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import io.flutter.plugin.common.MethodCall
-import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
-import io.flutter.plugin.common.PluginRegistry.Registrar
+import io.flutter.plugin.common.PluginRegistry
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.collections.ArrayList
 
-class IntentPlugin(private val registrar: Registrar, private val activity: Activity) : MethodCallHandler {
-
+class IntentPlugin(private val activity: Activity) : MethodCallHandler, PluginRegistry.ActivityResultListener {
     private var activityCompletedCallBack: ActivityCompletedCallBack? = null
-    lateinit var toBeCapturedImageLocationURI: Uri
-    lateinit var tobeCapturedImageLocationFilePath: File
-
-    companion object {
-        @JvmStatic
-        fun registerWith(registrar: Registrar) {
-            val channel = MethodChannel(registrar.messenger(), "intent")
-            channel.setMethodCallHandler(IntentPlugin(registrar, registrar.activity()))
-        }
-
-    }
-
-    init {
-        // when an activity will be started for getting some result from it, this callback function will handle it
-        // then processes received data and send that back to user
-        registrar.addActivityResultListener { requestCode, resultCode, intent ->
-            when (requestCode) {
-                999 -> {
-                    if (resultCode == Activity.RESULT_OK) {
-                        val filePaths = mutableListOf<String>()
-                        if (intent.clipData != null) {
-                            var i = 0
-                            while (i < intent.clipData?.itemCount!!) {
-                                if (intent.type == ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE)
-                                    filePaths.add(resolveContacts(intent.clipData?.getItemAt(i)?.uri!!))
-                                else
-                                    //filePaths.add(uriToFilePath(intent.clipData?.getItemAt(i)?.uri!!))
-                                    filePaths.add(intent.clipData?.getItemAt(i)?.uri!!.toString())
-                                i++
-                            }
-                            activityCompletedCallBack?.sendDocument(filePaths)
-                        } else {
-                            if (intent.type == ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE)
-                                filePaths.add(resolveContacts(intent.data!!))
-                            else
-                                //filePaths.add(uriToFilePath(intent.data!!))
-                                filePaths.add(intent.data!!.toString())
-                            activityCompletedCallBack?.sendDocument(filePaths)
-                        }
-                        true
-                    } else {
-                        activityCompletedCallBack?.sendDocument(listOf())
-                        false
-                    }
-                }
-                998 -> {
-                    if (resultCode == Activity.RESULT_OK) {
-                        activityCompletedCallBack?.sendDocument(listOf(tobeCapturedImageLocationFilePath.absolutePath))
-                        true
-                    } else
-                        false
-                }
-                else -> {
-                    false
-                }
-            }
-        }
-    }
+    private lateinit var toBeCapturedImageLocationURI: Uri
+    private lateinit var tobeCapturedImageLocationFilePath: File
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
@@ -87,7 +29,8 @@ class IntentPlugin(private val registrar: Registrar, private val activity: Activ
                 val intent = createIntentWithMethodCall(call)
 
                 try {
-                    if (call.argument<Boolean>("chooser")!!) activity.startActivity(Intent.createChooser(intent, call.argument<String>("chooserTitle") ?: "Sharing"))
+                    if (call.argument<Boolean>("chooser")!!) activity.startActivity(Intent.createChooser(intent, call.argument<String>("chooserTitle")
+                            ?: "Sharing"))
                     else activity.startActivity(intent)
                 } catch (e: Exception) {
                     result.error("Error", e.toString(), null)
@@ -145,35 +88,18 @@ class IntentPlugin(private val registrar: Registrar, private val activity: Activ
         if (call.argument<String>("package") != null)
             intent.`package` = call.argument<String>("package")
 
-        val _data = call.argument<String>("data")
-        val _type = call.argument<String>("type")
-        if (_data != null && _type == null)
-            intent.data = Uri.parse(_data);
-        if (_type != null && _data == null)
-            intent.type = _type;
-        if (_type != null && _data != null) {
-            intent.setDataAndType(Uri.parse(_data), _type);
+        val data = call.argument<String>("data")
+        val type = call.argument<String>("type")
+        if (data != null && type == null)
+            intent.data = Uri.parse(data)
+        if (type != null && data == null)
+            intent.type = type
+        if (type != null && data != null) {
+            intent.setDataAndType(Uri.parse(data), type)
         }
 
         // typeInfo parsed into associative array, which can be used for type casting extra data
         val typeInfo = call.argument<Map<String, String>>("typeInfo")
-                val intent = Intent()
-                intent.action = call.argument<String>("action")
-                if (call.argument<String>("package") != null)
-                    intent.`package` = call.argument<String>("package")
-
-                val _data = call.argument<String>("data")
-                val _type = call.argument<String>("type")
-                if (_data != null && _type == null)
-                    intent.data = Uri.parse(_data);
-                if (_type != null && _data == null)
-                    intent.type = _type;
-                if (_type != null && _data != null) {
-                    intent.setDataAndType(Uri.parse(_data), _type);
-                }
-
-                // typeInfo parsed into associative array, which can be used for type casting extra data
-                val typeInfo = call.argument<Map<String, String>>("typeInfo")
 
         call.argument<Map<String, Any>>("extra")?.apply {
             this.entries.forEach {
@@ -251,7 +177,7 @@ class IntentPlugin(private val registrar: Registrar, private val activity: Activ
 
         call.argument<String>("component")?.let { component ->
             val packageName = call.argument<String>("package")
-            check(packageName != null) { "Package $package not found for component" }
+            check(packageName != null) { "Package $packageName not found for component" }
             intent.component = ComponentName(packageName, component)
         }
 
@@ -296,6 +222,50 @@ class IntentPlugin(private val registrar: Registrar, private val activity: Activ
         val tmp = cursor?.getString(cursor.getColumnIndex(MediaStore.MediaColumns.DATA))
         cursor?.close()
         return tmp!!
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, intent: Intent?): Boolean {
+        when (requestCode) {
+            999 -> {
+                if (resultCode == Activity.RESULT_OK) {
+                    val filePaths = mutableListOf<String>()
+                    if (intent?.clipData != null) {
+                        var i = 0
+                        while (i < intent.clipData?.itemCount!!) {
+                            if (intent.type == ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE)
+                                filePaths.add(resolveContacts(intent.clipData?.getItemAt(i)?.uri!!))
+                            else
+                            //filePaths.add(uriToFilePath(intent.clipData?.getItemAt(i)?.uri!!))
+                                filePaths.add(intent.clipData?.getItemAt(i)?.uri!!.toString())
+                            i++
+                        }
+                        activityCompletedCallBack?.sendDocument(filePaths)
+                    } else {
+                        if (intent?.type == ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE)
+                            filePaths.add(resolveContacts(intent.data!!))
+                        else
+                        //filePaths.add(uriToFilePath(intent.data!!))
+                            filePaths.add(intent!!.data!!.toString())
+                        activityCompletedCallBack?.sendDocument(filePaths)
+                    }
+                    return true
+                } else {
+                    activityCompletedCallBack?.sendDocument(listOf())
+                    return false
+                }
+            }
+            998 -> {
+                return if (resultCode == Activity.RESULT_OK) {
+                    activityCompletedCallBack?.sendDocument(listOf(tobeCapturedImageLocationFilePath.absolutePath))
+                    true
+                } else {
+                    false
+                }
+            }
+            else -> {
+                return false
+            }
+        }
     }
 
 }
